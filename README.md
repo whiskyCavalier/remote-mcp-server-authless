@@ -1,50 +1,81 @@
-# Building a Remote MCP Server on Cloudflare (Without Auth)
+# Remote MCP Server (Authless) — Utility Tools Edition
 
-This example allows you to deploy a remote MCP server that doesn't require authentication on Cloudflare Workers. 
+A remote [Model Context Protocol](https://modelcontextprotocol.io) server deployed on
+Cloudflare Workers, exposing tools over HTTP/SSE with **no authentication layer** —
+useful as a reference implementation for connecting Claude, ChatGPT, or any MCP-compatible
+client to a public toolset without an OAuth flow.
 
-## Get started: 
+## What this demonstrates
+Forward-deployed / solutions engineering work frequently requires standing up a
+lightweight integration layer between a client's existing systems and an AI assistant.
+This repo is a minimal, production-shaped example of exactly that: a stateless,
+globally-distributed MCP server that any MCP client can call.
 
-[![Deploy to Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/cloudflare/ai/tree/main/demos/remote-mcp-authless)
+## Tools exposed
+| Tool | Description |
+|---|---|
+| `calculate` | Evaluates arithmetic expressions safely (no `eval`, uses a guarded parser) |
+| `repo_lookup` | Fetches public metadata (stars, language, description) for a GitHub repo by `owner/name` |
+| `echo` | Returns the input unchanged — used for connectivity smoke-testing |
 
-This will deploy your MCP server to a URL like: `remote-mcp-server-authless.<your-account>.workers.dev/sse`
-
-Alternatively, you can use the command line below to get the remote MCP Server created on your local machine:
-```bash
-npm create cloudflare@latest -- my-mcp-server --template=cloudflare/ai/demos/remote-mcp-authless
+## Architecture
+```
+Client (Claude / any MCP client)
+        │  HTTP + SSE
+        ▼
+Cloudflare Worker (src/index.ts)
+        │  McpServer (from @modelcontextprotocol/sdk)
+        ▼
+Tool handlers (src/tools/*.ts)
 ```
 
-## Customizing your MCP Server
+## Project structure
+```
+remote-mcp-server-authless/
+├── src/
+│   ├── index.ts          # Worker entrypoint, registers the MCP server
+│   └── tools/
+│       ├── calculate.ts
+│       ├── repoLookup.ts
+│       └── echo.ts
+├── wrangler.jsonc          # Cloudflare Worker config
+├── package.json
+├── tsconfig.json
+└── README.md
+```
 
-To add your own [tools](https://developers.cloudflare.com/agents/model-context-protocol/tools/) to the MCP server, define each tool inside the `init()` method of `src/index.ts` using `this.server.tool(...)`. 
+## Run locally
+```bash
+npm install
+npm run dev            # starts on http://localhost:8787
+```
 
-## Connect to Cloudflare AI Playground
+## Deploy
+```bash
+npx wrangler login
+npm run deploy
+```
+Your MCP endpoint will be available at:
+`https://remote-mcp-server-authless.<your-subdomain>.workers.dev/sse`
 
-You can connect to your MCP server from the Cloudflare AI Playground, which is a remote MCP client:
-
-1. Go to https://playground.ai.cloudflare.com/
-2. Enter your deployed MCP server URL (`remote-mcp-server-authless.<your-account>.workers.dev/sse`)
-3. You can now use your MCP tools directly from the playground!
-
-## Connect Claude Desktop to your MCP server
-
-You can also connect to your remote MCP server from local MCP clients, by using the [mcp-remote proxy](https://www.npmjs.com/package/mcp-remote). 
-
-To connect to your MCP server from Claude Desktop, follow [Anthropic's Quickstart](https://modelcontextprotocol.io/quickstart/user) and within Claude Desktop go to Settings > Developer > Edit Config.
-
-Update with this configuration:
-
+## Connect a client
+Add to any MCP-compatible client config:
 ```json
 {
   "mcpServers": {
-    "calculator": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "http://localhost:8787/sse"  // or remote-mcp-server-authless.your-account.workers.dev/sse
-      ]
+    "utility-tools": {
+      "url": "https://remote-mcp-server-authless.<your-subdomain>.workers.dev/sse"
     }
   }
 }
 ```
 
-Restart Claude and you should see the tools become available. 
+## Why "authless"
+This template intentionally skips auth to keep the integration surface minimal for demos
+and internal tooling. For anything handling private data, add an auth layer (Cloudflare
+Access, API key header, or full OAuth) before deploying publicly — see
+`remote-mcp-server-authless-1` in this account for a variant with a different tool
+domain, kept separate rather than merged so each stays a focused, single-purpose example.
+
+## License
+MIT
